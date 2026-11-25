@@ -1,0 +1,12 @@
+import { useEffect, useState } from 'react';
+import { getRow, saveRow } from '../services/supabaseService';
+export function usePaymentSettings() {
+  const [values, setValues] = useState<Record<string,string>>({ qr_code_url: '', upi_id: '', instructions: '', message_template: '', app_version: '', apk_download_url: '' }); const [contacts, setContacts] = useState<any[]>([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState('');
+  useEffect(() => { let mounted = true; void getRow('payment_settings', 1).then(row => { if (mounted) { setValues(Object.fromEntries(Object.keys(values).map(key => [key, String(row[key] || '')]))); setContacts(Array.isArray(row.whatsapp_numbers) ? row.whatsapp_numbers : []); } }).catch(err => { if (mounted) setError(err.message); }).finally(() => { if (mounted) setLoading(false); }); return () => { mounted = false; }; }, []);
+  function update(key: string, value: string) { setValues(prev => ({ ...prev, [key]: value })); }
+  function addContact() { setContacts(prev => [...prev, { id: String(Date.now()), label: 'Support', number: '+91', is_active: true }]); }
+  function updateContact(id: string, key: string, value: string | boolean) { setContacts(prev => prev.map(c => c.id === id ? { ...c, [key]: value } : c)); }
+  function removeContact(id: string) { setContacts(prev => prev.filter(c => c.id !== id)); }
+  async function save() { setError(''); setMessage(''); if (!values.qr_code_url.startsWith('https://') || !values.upi_id.trim()) { setError('Enter a hosted HTTPS QR image URL and UPI ID.'); return; } if (values.apk_download_url && !values.apk_download_url.startsWith('https://')) { setError('APK link must use HTTPS'); return; } if (contacts.some(x => !x.label.trim() || !/^\+?\d{10,15}$/.test(x.number))) { setError('Each contact needs a label and valid international phone number.'); return; } setBusy(true); try { await saveRow('payment_settings', { ...values, whatsapp_numbers: contacts, updated_at: new Date().toISOString() }, 1); setMessage('Configuration saved. Students will see the updated payment details.'); } catch (err) { setError(err instanceof Error ? err.message : 'Save failed'); } finally { setBusy(false); } }
+  return { values, contacts, loading, busy, error, message, update, addContact, updateContact, removeContact, save };
+}
